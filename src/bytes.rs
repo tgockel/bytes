@@ -105,6 +105,19 @@ pub struct Bytes {
     vtable: &'static Vtable,
 }
 
+#[cfg(feature = "expose-vtable")]
+pub struct Vtable {
+    /// fn(data, ptr, len)
+    pub clone: unsafe fn(&AtomicPtr<()>, *const u8, usize) -> Bytes,
+    /// fn(data, ptr, len)
+    ///
+    /// takes `Bytes` to value
+    pub to_vec: unsafe fn(&AtomicPtr<()>, *const u8, usize) -> Vec<u8>,
+    /// fn(data, ptr, len)
+    pub drop: unsafe fn(&mut AtomicPtr<()>, *const u8, usize),
+}
+
+#[cfg(not(feature = "expose-vtable"))]
 pub(crate) struct Vtable {
     /// fn(data, ptr, len)
     pub clone: unsafe fn(&AtomicPtr<()>, *const u8, usize) -> Bytes,
@@ -176,6 +189,22 @@ impl Bytes {
             data: AtomicPtr::new(ptr::null_mut()),
             vtable: &STATIC_VTABLE,
         }
+    }
+
+    /// Create a new `Bytes` from
+    ///
+    /// # Safety
+    /// The borrowed `bytes` will be referenced by the created structure after
+    /// this is returned, but there is no associated lifetime, so the borrow
+    /// checker will not know about it. It is your responsibility to ensure the
+    /// lifetime of the given `bytes` are handled through the `data`/`vtable`.
+    #[cfg(feature = "expose-vtable")]
+    pub unsafe fn with_custom_vtable(
+        bytes: &[u8],
+        data: AtomicPtr<()>,
+        vtable: &'static Vtable
+    ) -> Self {
+        Self { ptr: bytes.as_ptr(), len: bytes.len(), data, vtable }
     }
 
     /// Returns the number of bytes contained in this `Bytes`.
